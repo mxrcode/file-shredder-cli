@@ -18,13 +18,30 @@
 #include <vector>
 #include <string>
 
+#include <codecvt>
+#include <locale>
+
+ // Windows-specific headers for setting UTF-8 encoding
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <locale.h>
+#endif
+
+#pragma warning(disable : 4996) // Disable warning for std::codecvt_utf8_utf16
+
 constexpr size_t BUFFER_SIZE = 4096; // 4 KB
 
-void zeroFill(const std::string& filepath) {
+std::string filepath_to_utf8(const std::filesystem::path& filepath) {
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+    return converter.to_bytes(filepath.wstring());
+}
+
+void zeroFill(const std::filesystem::path& filepath) {
     try {
         std::fstream file(filepath, std::ios::in | std::ios::out | std::ios::binary);
         if (!file.is_open()) {
-            std::cerr << "Cannot open file: " << filepath << "\n";
+            std::cerr << "Cannot open file: " << filepath_to_utf8(filepath) << "\n";
             return;
         }
 
@@ -35,13 +52,13 @@ void zeroFill(const std::string& filepath) {
             std::uintmax_t bytes_to_write = (((BUFFER_SIZE) < (filesize - i)) ? (BUFFER_SIZE) : (filesize - i)); // std::min(BUFFER_SIZE, filesize - i);
             file.write(buffer.data(), bytes_to_write);
             if (!file) {
-                std::cerr << "Failed to write to file: " << filepath << "\n";
+                std::cerr << "Failed to write to file: " << filepath_to_utf8(filepath) << "\n";
                 return;
             }
         }
 
         file.close();
-        std::cout << "The file has been successfully filled with zeros: " << filepath << "\n";
+        std::cout << "The file has been successfully filled with zeros: " << filepath_to_utf8(filepath) << "\n";
     }
     catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "Filesystem error: " << e.what() << "\n";
@@ -80,7 +97,7 @@ bool confirmDelete() {
 
 void waitEnter() {
     std::cout << "Press Enter to exit...";
-    std::cin.get();
+    std::cin.ignore((std::numeric_limits<std::streamsize>::max)(), '\n');
 }
 
 void outputHelp() {
@@ -93,22 +110,33 @@ void outputHelp() {
     std::cout << "\n";
 }
 
-int main(int argc, char* argv[])
-{
+#ifdef _WIN32
+int wmain(int argc, wchar_t* argv[]) {
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#else
+int main(int argc, char* argv[]) {
+    setlocale(LC_ALL, "en_US.UTF-8");
+#endif
+
     if (argc < 2) {
         outputHelp();
         waitEnter();
         return 1;
     }
 
-	if (argc == 2 && (std::string(argv[1]) == "-h" || std::string(argv[1]) == "--help")) {
-        outputHelp();
-		return 0;
+	if (argc == 2) {
+		std::string arg = filepath_to_utf8(argv[1]);
+		if (arg == "-h" || arg == "--h" || arg == "--help") {
+			outputHelp();
+			return 0;
+		}
 	}
 
     for (int i = 1; i < argc; ++i) {
-        std::string filepath = argv[i];
-        std::cout << "Processing file " << (i) << " of " << (argc - 1) << ": " << filepath << "\n";
+        const std::filesystem::path filepath = argv[i];
+
+        std::cout << "Processing file " << (i) << " of " << (argc - 1) << ": " << filepath_to_utf8(filepath) << "\n";
 
         if (!std::filesystem::exists(filepath)) {
             std::cerr << "File not found: " << filepath << "\n";
