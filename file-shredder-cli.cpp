@@ -143,6 +143,11 @@ int main(int argc, char* argv[]) {
             continue; // Skip to the next file
         }
 
+        if (std::filesystem::is_directory(filepath)) {
+            std::cout << "Skipping directory: " << filepath << "\n";
+            continue; // Skip directories
+        }
+
         if (confirmDestroy()) {
             zeroFill(filepath);
 
